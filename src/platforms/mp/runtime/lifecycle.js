@@ -1,7 +1,10 @@
 import { handleError } from '../../../core/util/index'
 
 export function callHook (vm, hook, params) {
-  const handlers = vm.$options[hook]
+  let handlers = vm.$options[hook]
+  if (hook === 'onError') {
+    handlers = [handlers]
+  }
 
   let ret
   if (handlers) {
@@ -75,8 +78,7 @@ export function initMP (mpType, next) {
         mp.app = this
         mp.status = 'launch'
         this.globalData.appOptions = mp.appOptions = options
-
-        callHook(rootVueVM, 'onLaunch')
+        callHook(rootVueVM, 'onLaunch', options)
         next()
       },
 
@@ -84,7 +86,7 @@ export function initMP (mpType, next) {
       onShow (options = {}) {
         mp.status = 'show'
         this.globalData.appOptions = mp.appOptions = options
-        callHook(rootVueVM, 'onShow')
+        callHook(rootVueVM, 'onShow', options)
       },
 
       // Do something when app hide.
@@ -98,7 +100,6 @@ export function initMP (mpType, next) {
       }
     })
   } else if (mpType === 'component') {
-    const app = global.getApp()
     global.Component({
       // 页面的初始数据
       data: {
@@ -107,7 +108,7 @@ export function initMP (mpType, next) {
       methods: {
         handleProxy (e) {
           rootVueVM.$handleProxyWithVue(e)
-        },
+        }
       },
       // mp lifecycle for vue
       // 组件生命周期函数，在组件实例进入页面节点树时执行，注意此时不能调用 setData
@@ -161,13 +162,19 @@ export function initMP (mpType, next) {
         mp.query = query
         mp.status = 'load'
         getGlobalData(app, rootVueVM)
-        callHook(rootVueVM, 'onLoad')
+        callHook(rootVueVM, 'onLoad', query)
       },
 
       // 生命周期函数--监听页面显示
       onShow () {
+        mp.page = this
         mp.status = 'show'
         callHook(rootVueVM, 'onShow')
+
+        // 只有页面需要 setData
+        rootVueVM.$nextTick(() => {
+          rootVueVM._initDataToMP()
+        })
       },
 
       // 生命周期函数--监听页面初次渲染完成
@@ -176,23 +183,20 @@ export function initMP (mpType, next) {
 
         callHook(rootVueVM, 'onReady')
         next()
-
-        // 只有页面需要 setData
-        rootVueVM.$nextTick(() => {
-          rootVueVM._initDataToMP()
-        })
       },
 
       // 生命周期函数--监听页面隐藏
       onHide () {
         mp.status = 'hide'
         callHook(rootVueVM, 'onHide')
+        mp.page = null
       },
 
       // 生命周期函数--监听页面卸载
       onUnload () {
         mp.status = 'unload'
         callHook(rootVueVM, 'onUnload')
+        mp.page = null
       },
 
       // 页面相关事件处理函数--监听用户下拉动作

@@ -573,23 +573,23 @@ var nextTick = (function () {
       // "force" the microtask queue to be flushed by adding an empty timer.
       if (isIOS) { setTimeout(noop); }
     };
-  } else if (typeof MutationObserver !== 'undefined' && (
-    isNative(MutationObserver) ||
-    // PhantomJS and iOS 7.x
-    MutationObserver.toString() === '[object MutationObserverConstructor]'
-  )) {
-    // use MutationObserver where native Promise is not available,
-    // e.g. PhantomJS IE11, iOS7, Android 4.4
-    var counter = 1;
-    var observer = new MutationObserver(nextTickHandler);
-    var textNode = document.createTextNode(String(counter));
-    observer.observe(textNode, {
-      characterData: true
-    });
-    timerFunc = function () {
-      counter = (counter + 1) % 2;
-      textNode.data = String(counter);
-    };
+  // } else if (typeof MutationObserver !== 'undefined' && (
+  //   isNative(MutationObserver) ||
+  //   // PhantomJS and iOS 7.x
+  //   MutationObserver.toString() === '[object MutationObserverConstructor]'
+  // )) {
+  //   // use MutationObserver where native Promise is not available,
+  //   // e.g. PhantomJS IE11, iOS7, Android 4.4
+  //   var counter = 1
+  //   var observer = new MutationObserver(nextTickHandler)
+  //   var textNode = document.createTextNode(String(counter))
+  //   observer.observe(textNode, {
+  //     characterData: true
+  //   })
+  //   timerFunc = () => {
+  //     counter = (counter + 1) % 2
+  //     textNode.data = String(counter)
+  //   }
   } else {
     // fallback to setTimeout
     /* istanbul ignore next */
@@ -4144,7 +4144,8 @@ Object.defineProperty(Vue$3.prototype, '$ssrContext', {
   }
 });
 
-Vue$3.version = '1.0.1';
+Vue$3.version = '2.4.1';
+Vue$3.mpvueVersion = '1.0.7';
 
 /* globals renderer */
 
@@ -4923,6 +4924,9 @@ function patch () {
 
 function callHook$1 (vm, hook, params) {
   var handlers = vm.$options[hook];
+  if (hook === 'onError') {
+    handlers = [handlers];
+  }
 
   var ret;
   if (handlers) {
@@ -4998,8 +5002,7 @@ function initMP (mpType, next) {
         mp.app = this;
         mp.status = 'launch';
         this.globalData.appOptions = mp.appOptions = options;
-
-        callHook$1(rootVueVM, 'onLaunch');
+        callHook$1(rootVueVM, 'onLaunch', options);
         next();
       },
 
@@ -5009,7 +5012,7 @@ function initMP (mpType, next) {
 
         mp.status = 'show';
         this.globalData.appOptions = mp.appOptions = options;
-        callHook$1(rootVueVM, 'onShow');
+        callHook$1(rootVueVM, 'onShow', options);
       },
 
       // Do something when app hide.
@@ -5023,7 +5026,6 @@ function initMP (mpType, next) {
       }
     });
   } else if (mpType === 'component') {
-    var app = global.getApp();
     global.Component({
       // 页面的初始数据
       data: {
@@ -5032,7 +5034,7 @@ function initMP (mpType, next) {
       methods: {
         handleProxy: function handleProxy (e) {
           rootVueVM.$handleProxyWithVue(e);
-        },
+        }
       },
       // mp lifecycle for vue
       // 组件生命周期函数，在组件实例进入页面节点树时执行，注意此时不能调用 setData
@@ -5068,7 +5070,7 @@ function initMP (mpType, next) {
       }
     });
   } else {
-    var app$1 = global.getApp();
+    var app = global.getApp();
     global.Page({
       // 页面的初始数据
       data: {
@@ -5085,14 +5087,20 @@ function initMP (mpType, next) {
         mp.page = this;
         mp.query = query;
         mp.status = 'load';
-        getGlobalData(app$1, rootVueVM);
-        callHook$1(rootVueVM, 'onLoad');
+        getGlobalData(app, rootVueVM);
+        callHook$1(rootVueVM, 'onLoad', query);
       },
 
       // 生命周期函数--监听页面显示
       onShow: function onShow () {
+        mp.page = this;
         mp.status = 'show';
         callHook$1(rootVueVM, 'onShow');
+
+        // 只有页面需要 setData
+        rootVueVM.$nextTick(function () {
+          rootVueVM._initDataToMP();
+        });
       },
 
       // 生命周期函数--监听页面初次渲染完成
@@ -5101,23 +5109,20 @@ function initMP (mpType, next) {
 
         callHook$1(rootVueVM, 'onReady');
         next();
-
-        // 只有页面需要 setData
-        rootVueVM.$nextTick(function () {
-          rootVueVM._initDataToMP();
-        });
       },
 
       // 生命周期函数--监听页面隐藏
       onHide: function onHide () {
         mp.status = 'hide';
         callHook$1(rootVueVM, 'onHide');
+        mp.page = null;
       },
 
       // 生命周期函数--监听页面卸载
       onUnload: function onUnload () {
         mp.status = 'unload';
         callHook$1(rootVueVM, 'onUnload');
+        mp.page = null;
       },
 
       // 页面相关事件处理函数--监听用户下拉动作
@@ -5392,7 +5397,7 @@ function handleProxyWithVue (e) {
   var rootVueVM = this.$root;
   var type = e.type;
   var target = e.target; if ( target === void 0 ) target = {};
-  var currentTarget = e.currentTarget; if ( currentTarget === void 0 ) currentTarget = {};
+  var currentTarget = e.currentTarget;
   var ref = currentTarget || target;
   var dataset = ref.dataset; if ( dataset === void 0 ) dataset = {};
   var comkey = dataset.comkey; if ( comkey === void 0 ) comkey = '';
